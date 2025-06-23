@@ -6,8 +6,8 @@ if (!process.env.AMADEUS_CLIENT_ID || !process.env.AMADEUS_CLIENT_SECRET) {
 }
 
 const amadeus = new Amadeus({
-  clientId: process.env.AMADEUS_CLIENT_ID!,
-  clientSecret: process.env.AMADEUS_CLIENT_SECRET!,
+  clientId: process.env.AMADEUS_CLIENT_ID as string,
+  clientSecret: process.env.AMADEUS_CLIENT_SECRET as string,
 });
 
 interface Activity {
@@ -22,16 +22,16 @@ interface Activity {
 
 export async function POST(req: NextRequest) {
   try {
-    const { destination } = await req.json();
+    const body = await req.json();
+    const destination = typeof body.destination === 'string' ? body.destination : null;
 
     if (!destination) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'Missing required parameter: destination' },
         { status: 400 }
       );
     }
 
-    // First, get the city coordinates
     const cityResponse = await amadeus.referenceData.locations.get({
       keyword: destination,
       subType: 'CITY',
@@ -45,9 +45,15 @@ export async function POST(req: NextRequest) {
     }
 
     const city = cityResponse.data[0];
+    if (!city.geoCode || typeof city.geoCode.latitude !== 'number' || typeof city.geoCode.longitude !== 'number') {
+      return NextResponse.json(
+        { error: 'City geo coordinates not available' },
+        { status: 404 }
+      );
+    }
+
     const { latitude, longitude } = city.geoCode;
 
-    // Then, search for activities using the coordinates
     const activitiesResponse = await amadeus.shopping.activities.get({
       latitude,
       longitude,
@@ -55,13 +61,15 @@ export async function POST(req: NextRequest) {
       radiusUnit: 'KM',
     });
 
-    const activities = activitiesResponse.data.map((activity: Activity) => ({
-      id: activity.id,
-      title: activity.name,
-      subtitle: activity.shortDescription || 'Activity',
-      price: parseFloat(activity.price.amount),
-      imageUrl: activity.pictures?.[0]?.url,
-    }));
+    const activities = Array.isArray(activitiesResponse.data)
+      ? activitiesResponse.data.map((activity: Activity) => ({
+          id: activity.id,
+          title: activity.name,
+          subtitle: activity.shortDescription || 'Activity',
+          price: parseFloat(activity.price.amount),
+          imageUrl: activity.pictures?.[0]?.url,
+        }))
+      : [];
 
     return NextResponse.json({ activities });
   } catch (error) {
@@ -71,4 +79,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
