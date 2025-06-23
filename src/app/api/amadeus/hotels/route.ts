@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as Amadeus from 'amadeus';
+import Amadeus from 'amadeus';
 
 if (!process.env.AMADEUS_CLIENT_ID || !process.env.AMADEUS_CLIENT_SECRET) {
   throw new Error('Missing Amadeus API credentials');
